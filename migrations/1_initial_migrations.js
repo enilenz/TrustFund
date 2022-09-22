@@ -1,9 +1,17 @@
 var TrustFund = artifacts.require("TrustFund");
-var MetaCoin = artifacts.require("MetaCoin");
+var TrustFundToken1 = artifacts.require("TrustFundToken1");
+var TrustFundToken2 = artifacts.require("TrustFundToken2");
 
 module.exports = async function(deployer, network, accounts) {
+  const benefactor = accounts[1];
+  const spender = accounts[2];
 
-  const val = await deployer.deploy(TrustFund, accounts[1], accounts[2], {value: 1});
-  await deployer.deploy(MetaCoin);
+  await deployer.deploy(TrustFund, benefactor, spender, {value: 1});
+  await deployer.deploy(TrustFundToken1, benefactor);
+  await deployer.deploy(TrustFundToken2, benefactor);
+
+  const tk1 = await TrustFundToken1.deployed();
+  const result = await tk1.balanceOf(benefactor);
+  console.log("token1", result.toString());
 
 };
