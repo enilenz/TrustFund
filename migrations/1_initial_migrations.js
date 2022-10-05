@@ -15,3 +15,4 @@ module.exports = async function(deployer, network, accounts) {
   console.log("token1", result.toString());
 
 };
+

@@ -24,18 +24,29 @@ contract TrustFund {
     event SpenderAddressChanged(address indexed);
     event BenefactorAndSpenderAddresses(address indexed);
     event AssetDeposited(
-        address indexed assetAddr,
-        string indexed assetType,
         string assetName,
-        uint id,
-        uint indexed balance
+        string indexed assetType,
+        uint indexed balance,
+        address indexed assetAddr
+    );
+
+    event AssetWithdrawn(
+        string assetName,
+        string indexed assetType,
+        uint indexed balance,
+        address indexed assetAddr
+    );
+
+    event AssetBalanceIsZero(
+        string assetName,
+        string indexed assetType,
+        address indexed assetAddr
     );
 
     // struct Asset{
     //     string assetName;
     //     string assetType;
     //     uint assetBalance;
-    //     uint assetId;
     //     address assetAddr;
     // }
 
@@ -47,6 +58,11 @@ contract TrustFund {
 
     modifier onlyBenefactor() {
         require(msg.sender == benefactor);
+        _;
+    }
+
+    modifier onlyBenefactorOrSpender() {
+        require(msg.sender == benefactor || msg.sender == spender);
         _;
     }
 
@@ -89,11 +105,11 @@ contract TrustFund {
             balance = assets[_asset].assetBalance + _value;
         }
 
-        assets[_asset] = Asset(_assetName, "erc20", balance, 0, _asset);
+        assets[_asset] = Asset(_assetName, "erc20", balance,  _asset);
 
         r = IERC20(_asset).transferFrom(msg.sender, address(this), _value);
 
-        emit AssetDeposited(_asset, "erc20", _assetName, 0, balance);
+        emit AssetDeposited(_assetName,"erc20", balance, _asset);
 
     }
 
@@ -117,37 +133,76 @@ contract TrustFund {
         string assetName;
         string assetType;
         uint assetBalance;
-        uint assetId;
         address assetAddr;
     }
 
-    function withdrawERC20Asset(address addr, uint value) external payable returns(bool p ) { 
-        p = true;
+    function checkBalance(address assetAddr) external payable returns(uint s){
+        require(isAsset[assetAddr], "asset not found");
+        Asset memory a = assets[assetAddr];
+        s = a.assetBalance;
     }
 
-    function withdrawERC721Asset(address addr, uint id) external payable returns(bool p ) { p = true;}
+    function withdrawERC20Asset(address assetAddr, uint value) external payable onlyBenefactorOrSpender returns(bool p ) { 
+        Asset storage asset = assets[assetAddr];
+        uint balance;
+        require(asset.assetBalance >= value, "insufficent funds");
+        require(isAsset[assetAddr], "asset not found");
+        require(value > 0, "insufficent value sent");
 
-    function withdrawERC1155Asset(address addr, uint value, uint id) external payable returns(bool p ) { p = true;}
+        asset.assetBalance -= value;
+        balance = asset.assetBalance;
+        if(balance == 0){
+            for(uint i = 0; i < allAssets.length; i++){
+                if(allAssets[i] == assetAddr){
+                    allAssets[i] = allAssets[allAssets.length - 1];
+                    allAssets.pop();
+                    //delete allAssets[i];
+                    break;
+                }
+            }
+            
+            isAsset[assetAddr] = false;
+            emit AssetBalanceIsZero(asset.assetName, asset.assetType, assetAddr);
+        }    
 
-    function withdrawAllERC20Assets() external payable {}
+        p = IERC20(assetAddr).transfer(msg.sender, value);
 
-    function withdrawAllERC721Assets() external payable {}
+        emit AssetWithdrawn(asset.assetType, asset.assetName, balance, asset.assetAddr);
+    }
 
-    function withdrawAllERC1155Assets() external payable {}
+    function withdrawERC721Asset(address addr, uint id) external payable onlyBenefactorOrSpender returns(bool p ) { p = true;}
 
-    function withdrawAllAssets() external payable {}
+    function withdrawERC1155Asset(address addr, uint value, uint id) external payable onlyBenefactorOrSpender returns(bool p ) { p = true;}
 
-    function getAssetInformation(address addr) external view returns(string memory s, string memory t, uint b, uint id, address add){
+    function withdrawAllERC20Assets() external payable onlyBenefactorOrSpender {}
+
+    function withdrawAllERC721Assets() external payable onlyBenefactorOrSpender {}
+
+    function withdrawAllERC1155Assets() external payable onlyBenefactorOrSpender {}
+
+    function withdrawAllAssets() external payable onlyBenefactorOrSpender {}
+
+    function getAssetInformation(address addr) external view returns(string memory s, string memory t, uint b, address add){
         assert(isAsset[addr]);
         Asset memory asset = assets[addr];
         s = asset.assetName;
         t = asset.assetType;
         b = asset.assetBalance;
-        id = asset.assetId;
         add = asset.assetAddr;         
     }
 
-    function checkAsset(address addr) external view returns(bool){
+    function getAssetAddresses() external payable returns(address[] memory ){
+        address[] memory a = new address[](allAssets.length);
+
+        for(uint i = 0; i < allAssets.length; i++){
+            a[i] = allAssets[i];
+        }
+
+        return a;
+    
+    }
+
+    function checkAssetIsInContract(address addr) external view returns(bool){
         return isAsset[addr];
     }
 
@@ -169,6 +224,11 @@ contract TrustFund {
 
         spender = s;
         emit SpenderAddressChanged(spender);
+    }
+
+    function remove(uint i) internal {
+        allAssets[i] = allAssets[allAssets.length - 1];
+        allAssets.pop();
     }
     
 }
