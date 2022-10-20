@@ -176,13 +176,6 @@ contract("TrustFund", async(accounts) => {
 
         })
 
-        // it("should withdraw all ERC20 assets", async() => {
-        //     let numberOfAssets = await trustFund.getNumberOfAssets.call();
-        //     assert.equal(2, numberOfAssets.toString());
-            
-        //     let assetAddresses = await trustFund.getAssetAddresses.call();
-        //     console.log()
-        // })
     })
 
     describe("ERC721 token tests", async() => {
@@ -302,17 +295,8 @@ contract("TrustFund", async(accounts) => {
             assert.equal("erc721", assetInfo1.t);
             assert.equal(4, assetLength.toString());
 
-            // const allAdd = await trustFund.getAssetAddresses.call();
-            // console.log(allAdd);
-
-            // withdrawlResult = await trustFund.withdrawERC721Asset(nft1Addr, 0, {from: benefactor});
-            // const asssetInfo1 = await trustFund.getAssetInformation.call(nft1Addr);
-            // console.log(asssetInfo1);
-            // assetLength = await trustFund.getNumberOfAssets();
-            // const isAsset = await trustFund.checkAssetIsInContract();
-            // assert.isFalse(isAsset);
-            // assert.equal(3, assetLength.toString());
-            // console.log(assetInfo1.ids.toString());
+            const allAdd = await trustFund.getAssetAddresses.call();
+            console.log(allAdd);
 
         })
   
@@ -350,12 +334,6 @@ contract("TrustFund", async(accounts) => {
             assert.equal(2, assetLength.toString());
         })
 
-        it("should withdraw all ERC721 assets", async() => {
-            checkToken1 = await trustFund.checkAssetIsInContract.call(nft1Addr);
-            checkToken2 = await trustFund.checkAssetIsInContract.call(nft2Addr);
-            assert.isTrue(checkToken1);
-            assert.isTrue(checkToken2);
-        })
 
     })
 
