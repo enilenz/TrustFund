@@ -82,7 +82,8 @@ contract TrustFund{
         _;
     }
 
-    // modifier for withdrawal function to restrict access depending on blocktime
+    // modifier for withdrawal function to restrict access depending on blocktime,
+    /// @dev this modifier was not used in the contract although written to enable fast testing
     modifier lock() {
         require(block.timestamp >= lockDuration, "");
         _;
