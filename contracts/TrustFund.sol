@@ -17,9 +17,6 @@ contract TrustFund{
     address payable private spender;
     uint256 public lockDuration;
 
-    string public erc20String = "erc20";
-    string public erc721String = "erc721";
-
     IERC20 private ierc20;
     IERC721 private ierc721;
 
@@ -32,9 +29,14 @@ contract TrustFund{
     // address of all available assets
     address[] allAssets;
 
+    enum AssetType{
+        Erc20,
+        Erc721
+    }
+
     struct Asset {
     string assetName;
-    string assetType;
+    AssetType assetType;
     uint assetBalance;
     uint[] assetIds;
     address assetAddr;
@@ -47,21 +49,21 @@ contract TrustFund{
     event BenefactorAndSpenderAddresses(address indexed);
     event AssetDeposited(
         string assetName,
-        string indexed assetType,
+        AssetType assetType,
         uint indexed balance,
         address indexed assetAddr
     );
 
     event AssetWithdrawn(
         string assetName,
-        string indexed assetType,
+        AssetType assetType,
         uint indexed balance,
         address indexed assetAddr
     );
 
     event AssetBalanceIsZero(
         string assetName,
-        string indexed assetType,
+        AssetType assetType,
         address indexed assetAddr
     );
 
@@ -82,10 +84,13 @@ contract TrustFund{
         _;
     }
 
-    // modifier for withdrawal function to restrict access depending on blocktime,
-    /// @dev this modifier was not used in the contract although written to enable fast testing
-    modifier lock() {
-        require(block.timestamp >= lockDuration, "");
+    modifier nonZeroValue(uint _value) {
+        require(_value > 0, "invalid value");
+        _;
+    }
+
+    modifier onlyAsset(address assetAddr){
+        require(isAsset[assetAddr], "asset not found");
         _;
     }
 
@@ -104,16 +109,19 @@ contract TrustFund{
        emit LockDurationSet(lockDuration);
     }
 
-    function getLockTimeLeft() public view returns (uint256 l){
-        l = lockDuration;
+    function getLockTimeLeft() public view returns (uint256 timeLeft){
+        timeLeft = lockDuration;
     }
 
     /// @notice deposits erc20 asset into contract
     /// @param _asset address of erc20 contract
     /// @param _value amount of tokens for deposit
     /// @param _assetName name of tokens in contract
-    function depositERC20Asset(address _asset, uint _value, string calldata _assetName) external payable returns(bool r) {
-        require(_value > 0, "insufficent value sent");
+    function depositERC20Asset(
+        address _asset, uint _value, string calldata _assetName
+        ) 
+        external payable nonZeroValue(_value) returns(bool success)
+    {
         uint balance;
 
 
@@ -132,11 +140,11 @@ contract TrustFund{
         }
         uint[] memory a;
 
-        assets[_asset] = Asset(_assetName, erc20String, balance, a, _asset);
+        assets[_asset] = Asset(_assetName, AssetType.Erc20, balance, a, _asset);
 
-        r = IERC20(_asset).transferFrom(msg.sender, address(this), _value);
+        success = IERC20(_asset).transferFrom(msg.sender, address(this), _value);
 
-        emit AssetDeposited(_assetName, erc20String, balance, _asset);
+        emit AssetDeposited(_assetName, AssetType.Erc20, balance, _asset);
 
     }
 
@@ -155,7 +163,7 @@ contract TrustFund{
             isAsset[_asset] = true;
             allAssets.push(_asset);
             asset.assetName = _assetName;
-            asset.assetType = erc721String;
+            asset.assetType = AssetType.Erc721;
             asset.assetBalance = 0;
             asset.assetIds.push(assetId);
             asset.assetAddr = _asset;
@@ -168,27 +176,27 @@ contract TrustFund{
 
         IERC721(_asset).safeTransferFrom(msg.sender, address(this), assetId);
 
-        emit AssetDeposited(_assetName, erc721String, assetId, _asset);
+        emit AssetDeposited(_assetName, AssetType.Erc721, assetId, _asset);
 
     }
 
     /// @notice returns balance of erc20 asset 
     /// @param assetAddr address of erc20 contract
-    function checkBalance(address assetAddr) external payable returns(uint s){
-        require(isAsset[assetAddr], "asset not found");
-        Asset memory a = assets[assetAddr];
-        s = a.assetBalance;
+    function checkBalance(address assetAddr) external payable onlyAsset(assetAddr) returns(uint balance){
+        balance = assets[assetAddr].assetBalance;
     }
 
     /// @notice withdraws erc20 asset from contract
     /// @param assetAddr address of erc20 contract
     /// @param value amount of tokens to withdraw 
-    function withdrawERC20Asset(address assetAddr, uint value) public payable onlyBenefactorOrSpender returns(bool p ) { 
+    function withdrawERC20Asset(
+        address assetAddr, uint value
+        ) 
+        public payable onlyBenefactorOrSpender onlyAsset(assetAddr) returns(bool success ) 
+    { 
         Asset storage asset = assets[assetAddr];
         uint balance;
         require(asset.assetBalance >= value, "insufficent funds");
-        require(isAsset[assetAddr], "asset not found");
-        require(value > 0, "insufficent value sent");
 
         asset.assetBalance -= value;
         balance = asset.assetBalance;
@@ -204,9 +212,9 @@ contract TrustFund{
             emit AssetBalanceIsZero(asset.assetName, asset.assetType, assetAddr);
         }    
 
-        p = IERC20(assetAddr).transfer(msg.sender, value);
+        success = IERC20(assetAddr).transfer(msg.sender, value);
 
-        emit AssetWithdrawn(asset.assetType, asset.assetName, balance, asset.assetAddr);
+        emit AssetWithdrawn(asset.assetName, asset.assetType, balance, asset.assetAddr);
     }
 
     /// @notice withdrae erc721 asset from contract
@@ -242,7 +250,7 @@ contract TrustFund{
         address[] memory allAddresses = getAssetAddresses();
 
         for(uint i = 0; i < allAssets.length; i++){
-            if(keccak256(bytes(assets[allAddresses[i]].assetType)) == keccak256(bytes(erc20String))){
+            if(assets[allAddresses[i]].assetType == AssetType.Erc20 ){
                 withdrawERC20Asset(allAddresses[i], assets[allAddresses[i]].assetBalance);
                 n++;
             }
@@ -251,15 +259,15 @@ contract TrustFund{
 
     /// @notice returns information of assets if in contract
     /// @param addr address of erc721 contract
-    function getAssetInformation(address addr) external view returns(string memory s, string memory t, uint b, uint[] memory ids, address add){
+    function getAssetInformation(address addr) external view returns(string memory name, AssetType _assesttype, uint _balance, uint[] memory ids, address add){
         if(!isAsset[addr]){
             revert("asset not in contract");
         }
 
         Asset memory asset = assets[addr];
-        s = asset.assetName;
-        t = asset.assetType;
-        b = asset.assetBalance;
+        name = asset.assetName;
+        _assesttype = asset.assetType;
+        _balance = asset.assetBalance;
         ids = asset.assetIds;
         add = asset.assetAddr;         
     }
@@ -282,16 +290,16 @@ contract TrustFund{
     }
 
     /// @notice returns number of assets in contract
-    function getNumberOfAssets() public view returns(uint n) {
-        n = allAssets.length;
+    function getNumberOfAssets() public view returns(uint _number) {
+        _number = allAssets.length;
     }
 
-    function getBenefactor() external view returns(address b){
-        b = benefactor;
+    function getBenefactor() external view returns(address _benefactor){
+        _benefactor = benefactor;
     }
 
-    function getSpender() external view returns(address s){
-        s = spender;
+    function getSpender() external view returns(address _spender){
+        _spender = spender;
     }
 
     /// @notice changes spender address, can only be called by benefactor
@@ -312,11 +320,7 @@ contract TrustFund{
 
     /// @notice fucntion implemeted to receive and send erc721 tokens, in order to avoid lost(burnt) tokens
     function onERC721Received(
-        address operator,
-        address from,
-        uint256 tokenId,
-        bytes calldata data
-    ) external returns (bytes4){
+    ) external pure returns (bytes4){
         return this.onERC721Received.selector;
     }
     
